@@ -1,9 +1,153 @@
 @import "tailwindcss";
 
-@layer base {
-  body { @apply bg-brand-dark text-brand-text font-sans; }
+/* ── Tailwind v4 Theme (replaces tailwind.config.js) ── */
+@theme {
+  --color-primary-50: #f0f7ff;
+  --color-primary-100: #e0effe;
+  --color-primary-500: #0066cc;
+  --color-primary-600: #0052a3;
+  --color-primary-700: #003d7a;
+
+  --color-accent-50: #ecfdf5;
+  --color-accent-500: #06b6d4;
+  --color-accent-600: #0891b2;
+
+  --color-danger: #ef4444;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+
+  /* Brand dark-mode palette (used by InvestigatorPanel, Header, etc.) */
+  --color-brand-dark: #0f172a;
+  --color-brand-panel: #1e293b;
+  --color-brand-border: #334155;
+  --color-brand-text: #e2e8f0;
+  --color-brand-muted: #94a3b8;
+  --color-brand-red: #ef4444;
+  --color-brand-orange: #f97316;
+  --color-brand-gold: #eab308;
+
+  --font-family-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+
+  --animate-fadeIn: fadeIn 0.3s ease-in;
+  --animate-slideIn: slideIn 0.3s ease-out;
+
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes slideIn {
+    0% { transform: translateY(10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
 }
- 
-@layer utilities {
-  .code-font { font-family: 'Courier New', monospace; }
+
+/* ── Base ── */
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+  h1 {
+    @apply text-4xl font-bold tracking-tight;
+  }
+  h2 {
+    @apply text-2xl font-semibold;
+  }
+  h3 {
+    @apply text-lg font-semibold;
+  }
+  button {
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+}
+
+/* ── Components ── */
+@layer components {
+  /* Cards */
+  .card {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200;
+  }
+  .card-elevated {
+    @apply bg-white rounded-lg shadow-md border border-gray-100 p-6 hover:shadow-lg transition-shadow duration-200;
+  }
+
+  /* Buttons — each class is self-contained (no @apply btn) */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-md transition-all duration-200 focus:ring-2 focus:ring-offset-2;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-md transition-all duration-200 focus:ring-2 focus:ring-offset-2 bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500;
+  }
+  .btn-primary-light {
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-md transition-all duration-200 focus:ring-2 focus:ring-offset-2 bg-primary-50 text-primary-600 hover:bg-primary-100 focus:ring-primary-500;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-md transition-all duration-200 focus:ring-2 focus:ring-offset-2 bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-400;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-md transition-all duration-200 focus:ring-2 focus:ring-offset-2 bg-danger text-white hover:bg-red-600 focus:ring-danger;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+  .btn-lg {
+    @apply px-6 py-3 text-lg;
+  }
+
+  /* Inputs */
+  .input-field {
+    @apply w-full px-4 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all;
+  }
+  .input-field::placeholder {
+    @apply text-gray-400;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium;
+  }
+  .badge-success {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-success/20 text-success;
+  }
+  .badge-danger {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-danger/20 text-danger;
+  }
+  .badge-warning {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-warning/20 text-warning;
+  }
+  .badge-primary {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-100 text-primary-700;
+  }
+
+  /* Tables */
+  .table-header {
+    @apply bg-gray-50 border-b border-gray-200;
+  }
+  .table-row {
+    @apply border-b border-gray-100 hover:bg-gray-50 transition-colors;
+  }
+  .table-cell {
+    @apply px-4 py-3 text-sm;
+  }
+
+  /* Monospace text */
+  .code-font {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  /* Loading States */
+  .skeleton {
+    @apply bg-gray-200 animate-pulse rounded;
+  }
+}
+
+/* ── Utilities ── */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

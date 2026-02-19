@@ -1,19 +1,58 @@
+import { Menu, X } from 'lucide-react';
+import { useState } from 'react';
+
 export default function Header() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
-    <header className='bg-brand-panel border-b-2 border-brand-red px-8 py-4 flex items-center gap-4'>
-      <span className='text-3xl'>🕵️</span>
-      <div>
-        <h1 className='text-2xl font-black text-brand-red tracking-tight'>MuleNet</h1>
-        <p className='text-xs text-brand-muted'>Financial Forensics Engine — RIFT 2026</p>
+    <header className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
+      <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        {/* Logo */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-500 rounded-lg flex items-center justify-center shadow-md">
+            <span className="text-white font-bold text-lg">MN</span>
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">MultNet</h1>
+            <p className="text-xs text-gray-500">Fraud Ring Detection</p>
+          </div>
+        </div>
+
+        {/* Desktop Navigation */}
+        <nav className="hidden md:flex items-center gap-8">
+          <a href="#dashboard" className="text-gray-600 hover:text-primary-500 font-medium transition-colors">
+            Dashboard
+          </a>
+          <a href="#analyze" className="text-gray-600 hover:text-primary-500 font-medium transition-colors">
+            Analyze
+          </a>
+          <a href="#settings" className="text-gray-600 hover:text-primary-500 font-medium transition-colors">
+            Settings
+          </a>
+        </nav>
+
+        {/* Mobile Menu Toggle */}
+        <button 
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="md:hidden p-2 hover:bg-gray-100 rounded-md transition-colors"
+          aria-label="Toggle menu"
+        >
+          {mobileMenuOpen ? (
+            <X size={24} className="text-gray-900" />
+          ) : (
+            <Menu size={24} className="text-gray-900" />
+          )}
+        </button>
       </div>
-      <div className='ml-auto flex gap-2'>
-        <span className='px-3 py-1 bg-brand-dark border border-brand-border rounded-full
-          text-xs text-brand-muted code-font'>Graph Theory</span>
-        <span className='px-3 py-1 bg-brand-dark border border-brand-border rounded-full
-          text-xs text-brand-muted code-font'>Benford's Law</span>
-        <span className='px-3 py-1 bg-brand-dark border border-brand-border rounded-full
-          text-xs text-brand-purple code-font'>GNN</span>
-      </div>
+
+      {/* Mobile Menu */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-white border-t border-gray-200 px-6 py-4 space-y-3">
+          <a href="#dashboard" className="block text-gray-600 hover:text-primary-500 py-2">Dashboard</a>
+          <a href="#analyze" className="block text-gray-600 hover:text-primary-500 py-2">Analyze</a>
+          <a href="#settings" className="block text-gray-600 hover:text-primary-500 py-2">Settings</a>
+        </div>
+      )}
     </header>
-  )
+  );
 }

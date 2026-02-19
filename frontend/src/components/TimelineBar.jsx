@@ -1,45 +1,68 @@
 import { useState, useEffect, useRef } from 'react'
 
-export default function TimelineBar({ transactions }) {
+export default function TimelineBar({ transactions = [] }) {
     const [playing, setPlaying] = useState(false)
     const [idx, setIdx] = useState(0)
     const timer = useRef(null)
+    
     const sorted = [...transactions].sort(
         (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
     )
     const pct = sorted.length ? (idx / sorted.length) * 100 : 0
 
     useEffect(() => {
-        if (!playing) { clearTimeout(timer.current); return }
-        if (idx >= sorted.length) {
-            setPlaying(false);
-            return;
+        if (playing && idx < sorted.length) {
+            timer.current = setTimeout(() => {
+                setIdx(idx + 1)
+            }, 80)
+        } else if (idx >= sorted.length) {
+            setPlaying(false)
         }
-        timer.current = setTimeout(() => setIdx(i => i + 1), 80)
         return () => clearTimeout(timer.current)
-    }, [playing, idx])
+    }, [playing, idx, sorted.length])
 
-    const reset = () => { setPlaying(false); setIdx(0) }
+    const reset = () => {
+        setPlaying(false)
+        setIdx(0)
+        if (timer.current) clearTimeout(timer.current)
+    }
+
+    const toggle = () => {
+        if (idx >= sorted.length) {
+            setIdx(0)
+            setPlaying(true)
+        } else {
+            setPlaying(!playing)
+        }
+    }
 
     return (
-        <div className='bg-brand-panel border border-brand-border rounded-xl
-      p-3 flex items-center gap-3'>
-            <button onClick={() => { reset(); setPlaying(true) }}
-                className='bg-brand-red hover:bg-red-700 text-white text-sm font-bold
-          px-4 py-2 rounded-lg transition-colors whitespace-nowrap'>
-                ▶ Play Money Trail
-            </button>
-            <button onClick={reset}
-                className='bg-brand-border text-brand-muted text-sm px-3 py-2 rounded-lg'>
-                ■ Reset
-            </button>
-            <div className='flex-1 h-2 bg-brand-border rounded-full overflow-hidden'>
-                <div className='h-full bg-brand-red transition-all duration-75'
-                    style={{ width: `${pct}%` }} />
+        <div className='bg-gray-900 p-4 rounded-lg border border-gray-700'>
+            <div className='flex items-center gap-3 mb-3'>
+                <button
+                    onClick={toggle}
+                    className='bg-blue-600 hover:bg-blue-500 text-white font-bold 
+                        py-2 px-4 rounded transition-colors'
+                >
+                    {playing ? '⏸ Pause' : '▶ Play Money Trail'}
+                </button>
+                <button
+                    onClick={reset}
+                    className='bg-gray-700 hover:bg-gray-600 text-white font-bold 
+                        py-2 px-4 rounded transition-colors'
+                >
+                    ■ Reset
+                </button>
+                <span className='text-white text-sm ml-auto'>
+                    {idx} / {sorted.length} txns
+                </span>
             </div>
-            <span className='text-brand-muted text-xs code-font whitespace-nowrap'>
-                {idx}/{sorted.length} txns
-            </span>
+            <div className='w-full bg-gray-800 rounded-full h-2'>
+                <div
+                    className='bg-red-600 h-2 rounded-full transition-all'
+                    style={{ width: `${pct}%` }}
+                />
+            </div>
         </div>
     )
 }

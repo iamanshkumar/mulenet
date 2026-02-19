@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import axios from 'axios'
+
+const API = import.meta.env.VITE_API_URL
 
 export default function InvestigatorPanel({ account }) {
     const [narrative, setNarrative] = useState('')
@@ -7,22 +10,17 @@ export default function InvestigatorPanel({ account }) {
     const genNarrative = async (acc) => {
         setLoading(true)
         try {
-            const res = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: 'claude-sonnet-4-20250514', max_tokens: 1000,
-                    messages: [{
-                        role: 'user', content:
-                            `You are a financial crime investigator. Write a 3-sentence SAR narrative:
-Account: ${acc.account_id} | Score: ${acc.suspicion_score}/100
-Patterns: ${acc.detected_patterns?.join(', ')} | Ring: ${acc.ring_id}
-Stage: ${acc.lifecycle_stage || 'unknown'}
-End with a one-sentence recommended action.` }]
-                })
+            const { data } = await axios.post(`${API}/api/narrative`, {
+                account_id: acc.account_id,
+                suspicion_score: acc.suspicion_score,
+                detected_patterns: acc.detected_patterns,
+                ring_id: acc.ring_id,
+                lifecycle_stage: acc.lifecycle_stage || 'unknown',
             })
-            const d = await res.json()
-            setNarrative(d.content[0].text)
-        } catch { setNarrative('Narrative unavailable.') }
+            setNarrative(data.narrative)
+        } catch {
+            setNarrative('Narrative unavailable — configure ANTHROPIC_API_KEY in api/.env to enable AI narratives.')
+        }
         setLoading(false)
     }
 
@@ -30,8 +28,6 @@ End with a one-sentence recommended action.` }]
         if (account) genNarrative(account)
         else setNarrative('')
     }, [account])
-
-    
 
     if (!account) return (
         <div className='bg-brand-panel border border-dashed border-brand-border
