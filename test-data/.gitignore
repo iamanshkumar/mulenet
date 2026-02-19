@@ -1,0 +1,19 @@
+# Environment
+.env
+.env.local
+
+# Generated test data
+*.csv
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Node.js (if needed)
+node_modules/
+npm-debug.log*
+
+# macOS
+.DS_Store
