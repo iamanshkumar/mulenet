@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+@layer base {
+  body { @apply bg-brand-dark text-brand-text font-sans; }
+}
+ 
+@layer utilities {
+  .code-font { font-family: 'Courier New', monospace; }
+}
