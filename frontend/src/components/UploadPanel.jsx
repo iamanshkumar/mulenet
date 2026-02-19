@@ -1,147 +1,212 @@
-import { Upload, File, AlertCircle } from 'lucide-react';
-import { useState } from 'react';
-import axios from 'axios';
+import { Upload, AlertCircle, Check, Loader } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
+import { useAnalysis } from '../context/AnalysisContext'
 
-const API = import.meta.env.VITE_API_URL;
+const API = import.meta.env.VITE_API_URL
 
-export default function UploadPanel({ onResult }) {
-  const [dragOver, setDragOver] = useState(false);
-  const [fileName, setFileName] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [progress, setProgress] = useState('');
+const STEPS = [
+  { label: 'Uploading file...', icon: '📤' },
+  { label: 'Parsing CSV...', icon: '📋' },
+  { label: 'Building Graph...', icon: '🕸️' },
+  { label: 'Running Detectors...', icon: '🔍' },
+  { label: 'Scoring Accounts...', icon: '📊' },
+  { label: 'Complete!', icon: '✅' },
+]
+
+export default function UploadPanel() {
+  const [dragOver, setDragOver] = useState(false)
+  const [fileName, setFileName] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [currentStep, setCurrentStep] = useState(-1)
+  const [elapsed, setElapsed] = useState(0)
+  const timerRef = useRef(null)
+  const stepTimerRef = useRef(null)
+  const navigate = useNavigate()
+  const { loadAnalysis } = useAnalysis()
+
+  // Live elapsed timer
+  useEffect(() => {
+    if (isLoading) {
+      const start = Date.now()
+      timerRef.current = setInterval(() => setElapsed(((Date.now() - start) / 1000).toFixed(1)), 100)
+    } else {
+      clearInterval(timerRef.current)
+    }
+    return () => clearInterval(timerRef.current)
+  }, [isLoading])
+
+  // Auto-advance progress steps to show processing activity
+  useEffect(() => {
+    if (!isLoading || currentStep >= 4) return
+    const delays = [3000, 5000, 8000, 12000] // step advancement delays
+    if (currentStep >= 0 && currentStep < 4) {
+      stepTimerRef.current = setTimeout(() => {
+        setCurrentStep(s => Math.min(s + 1, 4))
+      }, delays[currentStep] || 5000)
+    }
+    return () => clearTimeout(stepTimerRef.current)
+  }, [isLoading, currentStep])
 
   const handleUpload = async (file) => {
-    setFileName(file.name);
-    setIsLoading(true);
-    setError('');
-    setProgress('Uploading...');
+    setFileName(file.name)
+    setIsLoading(true)
+    setError('')
+    setCurrentStep(0)
+    setElapsed(0)
+
     try {
-      // Parse CSV locally for raw transactions (used by TimelineBar/GraphPanel)
-      const text = await file.text();
-      const lines = text.trim().split('\n');
-      const headers = lines[0].split(',');
-      const rowCount = lines.length - 1;
+      // Parse CSV locally for validation
+      const text = await file.text()
+      const lines = text.trim().split('\n')
+      const headers = lines[0].split(',')
 
-      let rawTxns = lines.slice(1).map(line => {
-        const vals = line.split(',');
-        const obj = {};
-        headers.forEach((h, i) => obj[h.trim()] = vals[i]?.trim());
-        return obj;
-      });
+      const required = ['transaction_id', 'sender_id', 'receiver_id', 'amount', 'timestamp']
+      const missing = required.filter(c => !headers.map(h => h.trim()).includes(c))
+      if (missing.length > 0) {
+        throw new Error(`Missing columns: ${missing.join(', ')}`)
+      }
 
-      // Send CSV to API gateway
-      setProgress(`Analyzing ${rowCount.toLocaleString()} transactions...`);
-      const form = new FormData();
-      form.append('file', file);
+      // Build raw txns for local state
+      const rawTxns = lines.slice(1).map(line => {
+        const vals = line.split(',')
+        const obj = {}
+        headers.forEach((h, i) => obj[h.trim()] = vals[i]?.trim())
+        return obj
+      })
+
+      setCurrentStep(1) // Parsing CSV
+
+      // Upload to API — 120 second timeout for large datasets
+      const form = new FormData()
+      form.append('file', file)
+
       const { data } = await axios.post(`${API}/api/analyze`, form, {
-        timeout: 300000,
-        onUploadProgress: (p) => {
-          if (p.total) {
-            const pct = Math.round((p.loaded / p.total) * 100);
-            setProgress(`Uploading: ${pct}%`);
-          }
-        }
-      });
+        timeout: 120000,
+      })
 
-      setProgress('');
-      onResult(data, rawTxns);
+      // Complete
+      clearTimeout(stepTimerRef.current)
+      setCurrentStep(5)
+      loadAnalysis(data, rawTxns)
+
+      setTimeout(() => navigate('/dashboard'), 800)
     } catch (err) {
-      console.error('Upload failed:', err);
-      setError(err.response?.data?.message || err.message || 'Analysis failed');
-      setProgress('');
+      console.error('Upload failed:', err)
+      clearTimeout(stepTimerRef.current)
+      setError(
+        err.code === 'ECONNABORTED'
+          ? 'Request timed out. The dataset may be too large — try a smaller file or check the server.'
+          : err.response?.data?.message || err.message || 'Analysis failed'
+      )
+      setCurrentStep(-1)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = () => {
-    setDragOver(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleUpload(file);
-  };
-
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (file) handleUpload(file);
-  };
+  }
 
   return (
-    <div className="card-elevated space-y-6 animate-fadeIn">
+    <div className="card-dark max-w-xl w-full space-y-6 animate-slideUp">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Upload Data</h2>
-        <p className="text-sm text-gray-600">Import CSV files for fraud ring analysis</p>
+        <h2 className="text-2xl font-bold text-primary">Upload Data</h2>
+        <p className="text-sm mt-1 text-secondary">Import CSV files for fraud ring analysis</p>
       </div>
 
       {/* Drop Zone */}
       <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-lg p-12 text-center transition-all ${dragOver
-          ? 'border-primary-500 bg-primary-50'
-          : 'border-gray-300 hover:border-primary-400'
-          }`}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleUpload(f) }}
+        className="rounded-xl p-12 text-center transition-all cursor-pointer"
+        style={{
+          border: `2px dashed ${dragOver ? 'var(--color-accent)' : 'var(--color-panel-border)'}`,
+          background: dragOver ? 'rgba(230, 57, 70, 0.05)' : 'var(--color-panel-light)',
+        }}
       >
-        <Upload className={`w-12 h-12 mx-auto mb-4 ${dragOver ? 'text-primary-500' : 'text-gray-400'}`} />
-        <p className="text-gray-900 font-semibold mb-1">
-          Drag and drop your CSV file here
-        </p>
-        <p className="text-sm text-gray-500 mb-4">or</p>
-        <label className="btn-primary-light cursor-pointer">
+        <Upload className="w-12 h-12 mx-auto mb-4" style={{ color: dragOver ? 'var(--color-accent)' : 'var(--color-text-muted)' }} />
+        <p className="font-semibold mb-1 text-primary">Drag and drop your CSV file here</p>
+        <p className="text-sm mb-4 text-muted">or</p>
+        <label className="btn-accent cursor-pointer">
           Browse Files
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleFileSelect}
-            className="hidden"
-            disabled={isLoading}
-          />
+          <input type="file" accept=".csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
+            className="hidden" disabled={isLoading} />
         </label>
       </div>
 
-      {/* File Preview + Progress */}
-      {fileName && (
-        <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-          <File className="w-5 h-5 text-primary-500" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{fileName}</p>
-            <p className="text-xs text-gray-500">
-              {isLoading ? (progress || 'Processing…') : error ? 'Failed' : 'Analysis complete ✅'}
-            </p>
+      {/* Processing Steps */}
+      {isLoading && (
+        <div className="space-y-3">
+          <div className="flex justify-between text-sm">
+            <span className="text-secondary">Processing {fileName}...</span>
+            <span className="mono" style={{ color: 'var(--color-accent)' }}>{elapsed}s</span>
           </div>
-          {isLoading && (
-            <div className="animate-spin w-5 h-5 border-2 border-primary-200 border-t-primary-500 rounded-full" />
+
+          {/* Big current step indicator */}
+          {currentStep >= 0 && currentStep < 5 && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl animate-pulse"
+              style={{ background: 'rgba(230, 57, 70, 0.1)', border: '1px solid rgba(230, 57, 70, 0.3)' }}>
+              <Loader className="w-5 h-5 animate-spin" style={{ color: 'var(--color-accent)' }} />
+              <span className="font-semibold text-primary">{STEPS[currentStep]?.icon} {STEPS[currentStep]?.label}</span>
+            </div>
           )}
+
+          {/* Step list */}
+          <div className="space-y-1">
+            {STEPS.map((step, i) => {
+              const done = i < currentStep
+              const active = i === currentStep
+              return (
+                <div key={i} className="flex items-center gap-3 py-1.5 px-3 rounded-lg transition-all"
+                  style={{ background: active ? 'rgba(230, 57, 70, 0.08)' : 'transparent' }}>
+                  {done ? (
+                    <Check className="w-4 h-4" style={{ color: 'var(--color-success)' }} />
+                  ) : active ? (
+                    <Loader className="w-4 h-4 animate-spin" style={{ color: 'var(--color-accent)' }} />
+                  ) : (
+                    <div className="w-4 h-4 rounded-full" style={{ border: '1.5px solid var(--color-panel-border)' }} />
+                  )}
+                  <span className="text-sm" style={{
+                    color: done ? 'var(--color-success)' : active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                    fontWeight: active ? 600 : 400,
+                  }}>
+                    {step.label}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Success */}
+      {fileName && !isLoading && !error && currentStep === 5 && (
+        <div className="flex items-center gap-3 p-4 rounded-lg"
+          style={{ background: 'rgba(63, 185, 80, 0.1)', border: '1px solid rgba(63, 185, 80, 0.3)' }}>
+          <Check className="w-5 h-5" style={{ color: 'var(--color-success)' }} />
+          <span className="text-sm font-medium" style={{ color: 'var(--color-success)' }}>
+            {fileName} — Analysis complete! Redirecting...
+          </span>
         </div>
       )}
 
       {/* Error */}
       {error && (
-        <div className="flex gap-3 p-4 bg-red-50 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="flex gap-3 p-4 rounded-lg" style={{ background: 'rgba(230, 57, 70, 0.1)', border: '1px solid rgba(230, 57, 70, 0.3)' }}>
+          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: 'var(--color-accent)' }} />
+          <p className="text-sm" style={{ color: 'var(--color-accent)' }}>{error}</p>
         </div>
       )}
 
-      {/* Info Box */}
-      <div className="flex gap-3 p-4 bg-blue-50 rounded-lg">
-        <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+      {/* Required columns info */}
+      <div className="flex gap-3 p-4 rounded-lg" style={{ background: 'var(--color-panel-light)', border: '1px solid var(--color-panel-border)' }}>
+        <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: 'var(--color-blue)' }} />
         <div>
-          <p className="text-sm font-medium text-blue-900">Supported formats</p>
-          <p className="text-sm text-blue-700">CSV files with transaction data (up to 10K rows, max 50MB)</p>
+          <p className="text-sm font-medium text-primary">Required columns</p>
+          <p className="text-xs mono mt-1 text-muted">transaction_id, sender_id, receiver_id, amount, timestamp</p>
         </div>
       </div>
     </div>
-  );
+  )
 }

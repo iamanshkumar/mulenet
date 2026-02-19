@@ -3,7 +3,6 @@ import multer from 'multer'
 import axios from 'axios'
 import FormData from 'form-data'
 import Analysis from '../models/Analysis.js'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const router = express.Router()
 
@@ -17,15 +16,7 @@ const upload = multer({
     }
 })
 
-let geminiModel = null
-function getGeminiModel() {
-    if (!geminiModel && process.env.GEMINI_API_KEY) {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-        geminiModel = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' })
-        console.log('Gemini client initialized successfully')
-    }
-    return geminiModel
-}
+
 
 router.post('/analyze', upload.single('file'), async (req, res) => {
     try {
@@ -84,28 +75,49 @@ router.get('/analysis/:id', async (req, res) => {
     }
 })
 
+router.delete('/analysis/:id', async (req, res) => {
+    try {
+        await Analysis.findByIdAndDelete(req.params.id)
+        res.json({ success: true })
+    } catch (err) {
+        console.error('Delete analysis error:', err.message)
+        res.status(500).json({ error: 'Failed to delete analysis' })
+    }
+})
+
 router.post('/narrative', async (req, res) => {
     const { account_id, suspicion_score, detected_patterns, ring_id, lifecycle_stage } = req.body
-    const model = getGeminiModel()
 
-    if (!model) {
+    if (!process.env.GROQ_API_KEY) {
         const patterns = (detected_patterns || []).join(', ') || 'none'
         return res.json({
             narrative: `Account ${account_id} has a suspicion score of ${suspicion_score}/100. `
                 + `Detected patterns: ${patterns}. Ring: ${ring_id || 'none'}. `
                 + `Lifecycle stage: ${lifecycle_stage}. `
-                + `Narrative unavailable — configure GEMINI_API_KEY in api/.env to enable AI narratives.`
+                + `Configure GROQ_API_KEY in api/.env to enable AI narratives.`
         })
     }
 
     try {
-        const prompt = `You are a financial crime investigator. Write a 3-sentence SAR narrative:\n`
-            + `Account: ${account_id} | Score: ${suspicion_score}/100\n`
-            + `Patterns: ${(detected_patterns || []).join(', ')} | Ring: ${ring_id}\n`
-            + `Stage: ${lifecycle_stage}\n`
-            + `End with a one-sentence recommended action.`
-        const result = await model.generateContent(prompt)
-        res.json({ narrative: result.response.text() })
+        const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+            model: 'llama-3.1-8b-instant',
+            messages: [{
+                role: 'user',
+                content: `You are a senior financial crime investigator filing a Suspicious Activity Report. Write exactly 3 sentences describing this account professionally:\n`
+                    + `Account: ${account_id} | Score: ${suspicion_score}/100\n`
+                    + `Patterns: ${(detected_patterns || []).join(', ')} | Ring: ${ring_id}\n`
+                    + `Stage: ${lifecycle_stage}\n`
+                    + `End with one sentence recommended action starting with "Recommended Action:"`
+            }],
+            max_tokens: 300,
+            temperature: 0.7,
+        }, {
+            headers: {
+                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                'Content-Type': 'application/json',
+            }
+        })
+        res.json({ narrative: response.data.choices[0].message.content })
     } catch (err) {
         console.error('Narrative error:', err.message)
         res.status(500).json({ error: 'AI narrative generation failed.', message: err.message })
