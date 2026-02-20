@@ -24,8 +24,8 @@ export default function GraphPanel({ analysisData, transactions = [], onNodeClic
   const { dark } = useTheme()
   const [totalNodeCount, setTotalNodeCount] = useState(0)
 
-  const elements = useMemo(() => {
-    if (!analysisData) return []
+  const { elements, computedNodeCount } = useMemo(() => {
+    if (!analysisData) return { elements: [], computedNodeCount: 0 }
 
     const suspiciousMap = {}
       ; (analysisData.suspicious_accounts || []).forEach(acc => { suspiciousMap[acc.account_id] = acc })
@@ -49,7 +49,7 @@ export default function GraphPanel({ analysisData, transactions = [], onNodeClic
         ; (analysisData.suspicious_accounts || []).forEach(acc => allNodeIds.add(acc.account_id))
     }
 
-    setTotalNodeCount(allNodeIds.size)
+    const totalNodes = allNodeIds.size
 
     // NODE LIMITING: prioritize suspicious accounts, then fill with normals
     const suspiciousIds = new Set(Object.keys(suspiciousMap))
@@ -123,18 +123,39 @@ export default function GraphPanel({ analysisData, transactions = [], onNodeClic
       })
     }
 
-    return [...nodes, ...edges]
+    return { elements: [...nodes, ...edges], computedNodeCount: totalNodes }
   }, [analysisData, transactions, fromHistory])
 
-  // cy.resize() after elements change
+  // Sync totalNodeCount from useMemo result (avoids setState during render)
   useEffect(() => {
-    if (cyRef.current) {
-      setTimeout(() => {
-        cyRef.current.resize()
-        cyRef.current.fit(undefined, 30)
+    setTotalNodeCount(computedNodeCount)
+  }, [computedNodeCount])
+
+  // cy.resize() after elements change — with null safety
+  useEffect(() => {
+    const cy = cyRef.current
+    if (cy && !cy.destroyed()) {
+      const timer = setTimeout(() => {
+        try {
+          if (cyRef.current && !cyRef.current.destroyed()) {
+            cyRef.current.resize()
+            cyRef.current.fit(undefined, 30)
+          }
+        } catch (e) {
+          // Cytoscape instance may have been destroyed during navigation
+          console.warn('Cytoscape resize skipped:', e.message)
+        }
       }, 100)
+      return () => clearTimeout(timer)
     }
   }, [elements])
+
+  // Cleanup cytoscape ref on unmount
+  useEffect(() => {
+    return () => {
+      cyRef.current = null
+    }
+  }, [])
 
   const labelColor = dark ? '#e6edf3' : '#1a1a2e'
   const outlineColor = dark ? '#0d1117' : '#ffffff'
@@ -211,6 +232,10 @@ export default function GraphPanel({ analysisData, transactions = [], onNodeClic
       const nodeId = evt.target.id()
       const acc = (analysisData?.suspicious_accounts || []).find(a => a.account_id === nodeId)
       if (acc && onNodeClick) onNodeClick(acc)
+    })
+    // Clean up ref when Cytoscape is destroyed
+    cy.on('destroy', () => {
+      cyRef.current = null
     })
   }
 

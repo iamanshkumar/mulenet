@@ -7,21 +7,16 @@ export default function TimelineBar({ transactions = [], cyRef }) {
     const timerRef = useRef(null)
     const sortedRef = useRef([])
 
+    const hasTransactions = transactions && transactions.length > 0
+
     // Sort transactions once
     useEffect(() => {
-        sortedRef.current = [...transactions].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-    }, [transactions])
-
-    // If no transactions, show fallback
-    if (!transactions || transactions.length === 0) {
-        return (
-            <div className="card-dark text-center py-3" style={{ padding: '0.75rem 1.25rem' }}>
-                <span className="text-xs" style={{ color: '#6b7280' }}>
-                    Timeline unavailable for historical analyses
-                </span>
-            </div>
-        )
-    }
+        if (hasTransactions) {
+            sortedRef.current = [...transactions].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+        } else {
+            sortedRef.current = []
+        }
+    }, [transactions, hasTransactions])
 
     const sorted = sortedRef.current
     const total = sorted.length || 1
@@ -103,6 +98,17 @@ export default function TimelineBar({ transactions = [], cyRef }) {
                 })
             })
         }
+    }
+
+    // Show fallback AFTER all hooks have been called
+    if (!hasTransactions) {
+        return (
+            <div className="card-dark text-center py-3" style={{ padding: '0.75rem 1.25rem' }}>
+                <span className="text-xs" style={{ color: '#6b7280' }}>
+                    Timeline unavailable for historical analyses
+                </span>
+            </div>
+        )
     }
 
     return (
