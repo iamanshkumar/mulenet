@@ -12,12 +12,6 @@
   <em>"Follow the money. Expose the network."</em>
 </p>
 
-<p align="center">
-  <a href="#"><strong>🌐 Live Demo</strong></a> &nbsp;•&nbsp;
-  <a href="#"><strong>📂 GitHub</strong></a> &nbsp;•&nbsp;
-  <a href="#usage-instructions"><strong>� Usage Guide</strong></a>
-</p>
-
 ---
 
 ## 📋 Overview
