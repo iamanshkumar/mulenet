@@ -14,47 +14,74 @@ def detect_smurfing(G, df, recv_by_account=None, sent_by_account=None):
     if sent_by_account is None:
         sent_by_account = dict(tuple(df.groupby('sender_id')))
 
-    window = pd.Timedelta(hours=WINDOW_HRS)
+    window_sec = WINDOW_HRS * 3600
+
+    # 1. Vectorized structuring check over the entire DataFrame
+    matching_mask = pd.Series(False, index=df.index)
+    for t in THRESHOLDS:
+        matching_mask |= (df['amount'] >= t * 0.95) & (df['amount'] < t)
+    structuring_accounts = set(df[matching_mask]['sender_id'].tolist() + df[matching_mask]['receiver_id'].tolist())
 
     for account in G.nodes():
-        # --- Fan-in: many unique senders → one account within 72h ---
+        # --- Fan-in (rolling sliding window) ---
         rcv = recv_by_account.get(account)
         if rcv is not None and len(rcv) >= FAN_THRESH:
-            rcv_sorted = rcv.sort_values('timestamp')
-            senders = rcv_sorted['sender_id'].values
-            timestamps = rcv_sorted['timestamp'].values
+            # Assumes rcv is sorted by timestamp (pre-sorted at pipeline level)
+            senders = rcv['sender_id'].values
+            timestamps_sec = rcv['timestamp'].values.astype('int64') // 10**9
+            
             left = 0
-            for right in range(len(timestamps)):
-                while timestamps[right] - timestamps[left] > window:
+            counts = {}
+            unique_count = 0
+            for right in range(len(timestamps_sec)):
+                c_right = senders[right]
+                counts[c_right] = counts.get(c_right, 0) + 1
+                if counts[c_right] == 1:
+                    unique_count += 1
+                
+                while timestamps_sec[right] - timestamps_sec[left] > window_sec:
+                    c_left = senders[left]
+                    counts[c_left] -= 1
+                    if counts[c_left] == 0:
+                        unique_count -= 1
                     left += 1
-                if len(set(senders[left:right + 1])) >= FAN_THRESH:
+
+                if unique_count >= FAN_THRESH:
                     res[account]['patterns'].append('fan_in')
                     res[account]['scores'].append(20)
                     break
 
-        # --- Fan-out: one account → many unique receivers within 72h ---
+        # --- Fan-out (rolling sliding window) ---
         snt = sent_by_account.get(account)
         if snt is not None and len(snt) >= FAN_THRESH:
-            snt_sorted = snt.sort_values('timestamp')
-            receivers = snt_sorted['receiver_id'].values
-            timestamps = snt_sorted['timestamp'].values
+            # Assumes snt is sorted by timestamp (pre-sorted at pipeline level)
+            receivers = snt['receiver_id'].values
+            timestamps_sec = snt['timestamp'].values.astype('int64') // 10**9
+
             left = 0
-            for right in range(len(timestamps)):
-                while timestamps[right] - timestamps[left] > window:
+            counts = {}
+            unique_count = 0
+            for right in range(len(timestamps_sec)):
+                c_right = receivers[right]
+                counts[c_right] = counts.get(c_right, 0) + 1
+                if counts[c_right] == 1:
+                    unique_count += 1
+
+                while timestamps_sec[right] - timestamps_sec[left] > window_sec:
+                    c_left = receivers[left]
+                    counts[c_left] -= 1
+                    if counts[c_left] == 0:
+                        unique_count -= 1
                     left += 1
-                if len(set(receivers[left:right + 1])) >= FAN_THRESH:
+
+                if unique_count >= FAN_THRESH:
                     res[account]['patterns'].append('fan_out')
                     res[account]['scores'].append(20)
                     break
 
-        # --- Structuring: amounts just below reporting thresholds ---
-        rcv_amts = rcv['amount'].values if rcv is not None else []
-        snt_amts = snt['amount'].values if snt is not None else []
-        all_amounts = list(rcv_amts) + list(snt_amts)
-        for amt in all_amounts:
-            if any(t * 0.95 <= amt < t for t in THRESHOLDS):
-                res[account]['patterns'].append('below_threshold_amounts')
-                res[account]['scores'].append(10)
-                break
+        # --- Structuring ---
+        if account in structuring_accounts:
+            res[account]['patterns'].append('below_threshold_amounts')
+            res[account]['scores'].append(10)
 
     return dict(res)

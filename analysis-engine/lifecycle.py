@@ -23,9 +23,22 @@ def classify_lifecycle_batch(scored, df, money_in=None, money_out=None):
     for acc_id in scored:
         mi = money_in.get(acc_id, 0)
         mo = money_out.get(acc_id, 0)
-        last_s = last_send.get(acc_id, pd.Timestamp.min)
-        last_r = last_recv.get(acc_id, pd.Timestamp.min)
-        last = max(last_s, last_r)
+        last_s = last_send.get(acc_id, None)
+        last_r = last_recv.get(acc_id, None)
+        
+        if last_s is None and last_r is None:
+            last = pd.Timestamp.min
+        elif last_s is None:
+            last = last_r
+        elif last_r is None:
+            last = last_s
+        else:
+            if hasattr(last_s, 'tz') and last_s.tz is not None:
+                last_s = last_s.tz_localize(None)
+            if hasattr(last_r, 'tz') and last_r.tz is not None:
+                last_r = last_r.tz_localize(None)
+            last = max(last_s, last_r)
+            
         tx_count = tx_count_send.get(acc_id, 0) + tx_count_recv.get(acc_id, 0)
 
         # No transactions → unknown

@@ -4,56 +4,64 @@ import pandas as pd
 
 BENFORD = np.array([np.log10(1 + 1 / d) for d in range(1, 10)])
 
-def _lead_vectorized(amounts):
-    """Extract leading digits from an array of amounts using string ops."""
-    digits = []
-    for a in amounts:
-        for ch in str(abs(float(a))):
-            if ch.isdigit() and ch != '0':
-                digits.append(int(ch))
-                break
-        else:
-            digits.append(0)
-    return digits
-
 def benford_analysis(df, txs_by_account=None):
     results = {}
-    all_accounts = set(df['sender_id'].tolist() + df['receiver_id'].tolist())
-
-    # Pre-compute transactions per account if not provided
-    if txs_by_account is None:
-        sender_groups = df.groupby('sender_id')
-        receiver_groups = df.groupby('receiver_id')
-        txs_by_account = {}
-        for acc in all_accounts:
-            parts = []
-            if acc in sender_groups.groups:
-                parts.append(sender_groups.get_group(acc))
-            if acc in receiver_groups.groups:
-                parts.append(receiver_groups.get_group(acc))
-            txs_by_account[acc] = pd.concat(parts) if parts else pd.DataFrame()
-
+    
+    # Extract unique accounts directly
+    all_accounts = list(set(df['sender_id'].tolist() + df['receiver_id'].tolist()))
+    
+    # Initialize default results
     for acc in all_accounts:
-        txs = txs_by_account.get(acc, pd.DataFrame())
-        if len(txs) < 20:
-            results[acc] = {'compliant': True, 'p_value': 1.0, 'score_delta': 0, 'pattern': None}
-            continue
-        digits = _lead_vectorized(txs['amount'].values)
-        obs = np.zeros(9)
-        for d in digits:
-            if 1 <= d <= 9:
-                obs[d - 1] += 1
-        n = sum(obs)
-        if n < 10:
-            results[acc] = {'compliant': True, 'p_value': 1.0, 'score_delta': 0, 'pattern': None}
-            continue
-        exp = np.maximum(BENFORD * n, 0.5)
-        _, pval = stats.chisquare(obs, exp)
-        violating = pval < 0.05
-        results[acc] = {
-            'compliant': not violating,
-            'p_value': round(pval, 4),
-            'score_delta': 15 if violating else -15,
-            'pattern': 'benford_violation' if violating else None
-        }
+        results[acc] = {'compliant': True, 'p_value': 1.0, 'score_delta': 0, 'pattern': None}
+
+    # Vectorized first digit extraction mathematically
+    amounts = np.abs(df['amount'].to_numpy())
+    valid = amounts > 1e-9
+    leading_digits = np.zeros_like(amounts, dtype=int)
+    if np.any(valid):
+        valid_amts = amounts[valid]
+        log10_vals = np.floor(np.log10(valid_amts))
+        first_digit = np.floor(valid_amts / (10**log10_vals)).astype(int)
+        leading_digits[valid] = np.clip(first_digit, 1, 9)
+
+    df_temp = pd.DataFrame({
+        'sender_id': df['sender_id'],
+        'receiver_id': df['receiver_id'],
+        'leading_digit': leading_digits
+    })
+
+    # Vectorized counting using groupby and size
+    sender_counts = df_temp.groupby(['sender_id', 'leading_digit']).size().unstack(fill_value=0)
+    receiver_counts = df_temp.groupby(['receiver_id', 'leading_digit']).size().unstack(fill_value=0)
+
+    sender_counts = sender_counts.reindex(index=all_accounts, columns=range(1, 10), fill_value=0)
+    receiver_counts = receiver_counts.reindex(index=all_accounts, columns=range(1, 10), fill_value=0)
+    total_counts = sender_counts + receiver_counts
+
+    # Transaction counts per account
+    tx_counts_sender = df['sender_id'].value_counts()
+    tx_counts_receiver = df['receiver_id'].value_counts()
+    tx_counts = tx_counts_sender.add(tx_counts_receiver, fill_value=0).reindex(all_accounts, fill_value=0).to_numpy()
+
+    n_values = total_counts.sum(axis=1).to_numpy()
+    valid_mask = (n_values >= 10) & (tx_counts >= 20)
+
+    if np.any(valid_mask):
+        obs_valid = total_counts.values[valid_mask]
+        n_valid = n_values[valid_mask][:, None]
+        exp_valid = np.maximum(BENFORD[None, :] * n_valid, 0.5)
+
+        # Single vectorized chi-square call over axis 1
+        _, pvals = stats.chisquare(obs_valid, exp_valid, axis=1)
+
+        valid_indices = np.where(valid_mask)[0]
+        for idx, pval in zip(valid_indices, pvals):
+            acc = all_accounts[idx]
+            violating = pval < 0.05
+            results[acc] = {
+                'compliant': not violating,
+                'p_value': round(float(pval), 4),
+                'score_delta': 15 if violating else -15,
+                'pattern': 'benford_violation' if violating else None
+            }
     return results

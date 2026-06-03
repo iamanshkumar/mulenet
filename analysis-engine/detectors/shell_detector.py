@@ -16,8 +16,9 @@ def detect_shells(G, df, money_in=None, money_out=None,
     if sent_by_account is None:
         sent_by_account = dict(tuple(df.groupby('sender_id')))
 
-    # Betweenness centrality: O(V*E)
-    bc = nx.betweenness_centrality(G, normalized=True)
+    # Betweenness centrality: Approximation O(k*E) instead of O(V*E)
+    k_val = 100 if G.number_of_nodes() >= 100 else None
+    bc = nx.betweenness_centrality(G, k=k_val, normalized=True)
 
     # Pre-compute tx counts per node
     recv_counts = df.groupby('receiver_id').size().to_dict()

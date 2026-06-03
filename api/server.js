@@ -8,9 +8,9 @@ const app = express()
 app.use(cors({ origin: '*' }))
 app.use(express.json({ limit: '50mb' }))
 
-// Set server-level timeout to 120s for large dataset analysis
+// Set server-level timeout to 300s for large dataset analysis
 app.use((req, res, next) => {
-  res.setTimeout(120000)
+  res.setTimeout(300000)
   next()
 })
 
@@ -24,3 +24,4 @@ app.get('/health', (req, res) => res.json({ status: 'alive', service: 'mulenet-a
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => console.log(`API running on port ${PORT}`))
+// restart nodemon

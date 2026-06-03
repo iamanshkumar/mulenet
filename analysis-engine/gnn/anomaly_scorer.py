@@ -4,7 +4,7 @@ from torch_geometric.utils import negative_sampling
 from .graph_sage import GraphSAGE
 from .feature_builder import build_pyg_graph
  
-def compute_gnn_scores(G, df, scored, epochs=80):
+def compute_gnn_scores(G, df, scored, epochs=15):
     data, idx = build_pyg_graph(G, df, scored)
     model     = GraphSAGE(in_ch=data.x.shape[1])
     opt       = torch.optim.Adam(model.parameters(), lr=0.005)

@@ -13,6 +13,9 @@ from scoring import compute_scores
 from lifecycle import classify_lifecycle_batch
 from output_builder import build_output
 
+import psutil
+print(psutil.Process().memory_info().rss / 1024 / 1024)
+
 # Safe GNN import — never crash if torch missing
 GNN_ENABLED = False
 try:
@@ -33,27 +36,25 @@ async def health():
 async def analyze(file: UploadFile = File(...)):
     start = time.time()
     df = pd.read_csv(io.StringIO((await file.read()).decode('utf-8')))
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    print(f'[{time.time()-start:.2f}s] CSV parsed — {len(df)} rows')
+    
+    # ── Clean missing data to prevent pipeline crashes ──────────
+    df = df.dropna(subset=['transaction_id', 'sender_id', 'receiver_id', 'amount', 'timestamp'])
+
+    # ── Normalize timezones to naive UTC to prevent timezone errors ──
+    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True).dt.tz_localize(None)
+
+    # ── Pre-sort globally by timestamp ONCE ─────────────────────
+    df = df.sort_values('timestamp')
+    print(f'[{time.time()-start:.2f}s] CSV parsed, cleaned & sorted — {len(df)} rows')
 
     # ── Pre-compute shared lookups ONCE ─────────────────────────
+    # Since df is sorted, these groups are guaranteed to be sorted chronologically!
     recv_by_account = dict(tuple(df.groupby('receiver_id')))
     sent_by_account = dict(tuple(df.groupby('sender_id')))
     money_in = {acc: grp['amount'].sum() for acc, grp in recv_by_account.items()}
     money_out = {acc: grp['amount'].sum() for acc, grp in sent_by_account.items()}
 
-    # Merge into txs_by_account for benford
-    all_accounts = set(df['sender_id'].tolist() + df['receiver_id'].tolist())
-    txs_by_account = {}
-    for acc in all_accounts:
-        parts = []
-        if acc in recv_by_account:
-            parts.append(recv_by_account[acc])
-        if acc in sent_by_account:
-            parts.append(sent_by_account[acc])
-        txs_by_account[acc] = pd.concat(parts) if parts else pd.DataFrame()
-
-    print(f'[{time.time()-start:.2f}s] Lookups pre-computed — {len(all_accounts)} accounts')
+    print(f'[{time.time()-start:.2f}s] Lookups pre-computed — {len(recv_by_account) + len(sent_by_account)} accounts')
 
     # ── Build graph ─────────────────────────────────────────────
     G = build_graph(df)
@@ -70,10 +71,10 @@ async def analyze(file: UploadFile = File(...)):
                            recv_by_account=recv_by_account, sent_by_account=sent_by_account)
     print(f'[{time.time()-start:.2f}s] Shells detected')
 
-    benford = benford_analysis(df, txs_by_account=txs_by_account)
+    benford = benford_analysis(df)
     print(f'[{time.time()-start:.2f}s] Benford analysis done')
 
-    whitelist = apply_whitelist(G, df, recv_by_account=recv_by_account, sent_by_account=sent_by_account)
+    whitelist = apply_whitelist(G, df)
     print(f'[{time.time()-start:.2f}s] Whitelist applied — {len(whitelist)} whitelisted')
 
     scored = compute_scores(G, df, cycles, smurfing, shells, benford, whitelist,

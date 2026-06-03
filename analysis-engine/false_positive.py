@@ -1,31 +1,37 @@
 def apply_whitelist(G, df, recv_by_account=None, sent_by_account=None):
-    whitelist = set()
+    # Vectorized metrics aggregation
+    receiver_stats = df.groupby('receiver_id').agg(
+        count=('amount', 'size'),
+        mean=('amount', 'mean'),
+        std=('amount', 'std'),
+        nunique_senders=('sender_id', 'nunique')
+    )
 
-    # Pre-group if not provided
-    if recv_by_account is None:
-        recv_by_account = dict(tuple(df.groupby('receiver_id')))
-    if sent_by_account is None:
-        sent_by_account = dict(tuple(df.groupby('sender_id')))
+    sender_stats = df.groupby('sender_id').agg(
+        count=('amount', 'size'),
+        mean=('amount', 'mean'),
+        std=('amount', 'std'),
+        nunique_receivers=('receiver_id', 'nunique')
+    )
 
-    for node in G.nodes():
-        in_txs = recv_by_account.get(node, None)
-        out_txs = sent_by_account.get(node, None)
+    # Compute coefficients of variation & diversity
+    receiver_stats['cv'] = receiver_stats['std'] / receiver_stats['mean']
+    receiver_stats['div'] = receiver_stats['nunique_senders'] / receiver_stats['count']
+    sender_stats['cv'] = sender_stats['std'] / sender_stats['mean']
 
-        # MERCHANT: many diverse customers paying similar amounts
-        if in_txs is not None and len(in_txs) >= 20:
-            mean = in_txs['amount'].mean()
-            cv = in_txs['amount'].std() / mean if mean > 0 else 0
-            div = in_txs['sender_id'].nunique() / len(in_txs)
-            if div > 0.6 and 0.1 < cv < 2.5:
-                whitelist.add(node)
-                continue
+    merchant_mask = (
+        (receiver_stats['count'] >= 20) &
+        (receiver_stats['div'] > 0.6) &
+        (receiver_stats['cv'] > 0.1) &
+        (receiver_stats['cv'] < 2.5)
+    )
+    merchant_whitelist = set(receiver_stats[merchant_mask].index)
 
-        # PAYROLL: equal outflows to many unique recipients
-        if out_txs is not None and len(out_txs) >= 10:
-            mean_o = out_txs['amount'].mean()
-            cv_o = out_txs['amount'].std() / mean_o if mean_o > 0 else 1
-            if cv_o < 0.15 and out_txs['receiver_id'].nunique() > 8:
-                whitelist.add(node)
-                continue
+    payroll_mask = (
+        (sender_stats['count'] >= 10) &
+        (sender_stats['cv'] < 0.15) &
+        (sender_stats['nunique_receivers'] > 8)
+    )
+    payroll_whitelist = set(sender_stats[payroll_mask].index)
 
-    return whitelist
+    return merchant_whitelist.union(payroll_whitelist)

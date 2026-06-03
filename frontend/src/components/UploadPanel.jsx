@@ -84,7 +84,7 @@ export default function UploadPanel() {
       form.append('file', file)
 
       const { data } = await axios.post(`${API}/api/analyze`, form, {
-        timeout: 120000,
+        timeout: 300000,
       })
 
       // Complete
