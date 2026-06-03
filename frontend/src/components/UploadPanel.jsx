@@ -1,4 +1,4 @@
-import { Upload, AlertCircle, Check, Loader } from 'lucide-react'
+import { Upload, AlertCircle, Check, Loader, Download } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
@@ -49,6 +49,27 @@ export default function UploadPanel() {
     }
     return () => clearTimeout(stepTimerRef.current)
   }, [isLoading, currentStep])
+
+  const downloadSampleCSV = () => {
+    const csvContent = 
+      "transaction_id,sender_id,receiver_id,amount,timestamp\n" +
+      "T001,ACC_A,ACC_B,50000,2024-01-15 09:30:00\n" +
+      "T002,ACC_B,ACC_C,47500,2024-01-15 11:45:00\n" +
+      "T003,ACC_C,ACC_A,45000,2024-01-15 14:00:00\n" +
+      "T004,ACC_D,ACC_E,12000,2024-01-15 15:30:00\n" +
+      "T005,ACC_E,ACC_F,11800,2024-01-15 16:00:00\n" +
+      "T006,ACC_F,ACC_D,11500,2024-01-15 16:30:00\n"
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    link.setAttribute("download", "mulenet_sample_transactions.csv")
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   const handleUpload = async (file) => {
     setFileName(file.name)
@@ -128,11 +149,23 @@ export default function UploadPanel() {
         <Upload className="w-12 h-12 mx-auto mb-4" style={{ color: dragOver ? 'var(--color-accent)' : 'var(--color-text-muted)' }} />
         <p className="font-semibold mb-1 text-primary">Drag and drop your CSV file here</p>
         <p className="text-sm mb-4 text-muted">or</p>
-        <label className="btn-accent cursor-pointer">
-          Browse Files
-          <input type="file" accept=".csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
-            className="hidden" disabled={isLoading} />
-        </label>
+        <div className="flex justify-center items-center gap-3">
+          <label className="btn-accent cursor-pointer">
+            Browse Files
+            <input type="file" accept=".csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
+              className="hidden" disabled={isLoading} />
+          </label>
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); downloadSampleCSV(); }}
+            className="btn-ghost flex items-center gap-1.5"
+            disabled={isLoading}
+            style={{ cursor: 'pointer' }}
+          >
+            <Download className="w-4 h-4" />
+            Download Sample CSV
+          </button>
+        </div>
       </div>
 
       {/* Processing Steps */}
@@ -199,12 +232,14 @@ export default function UploadPanel() {
         </div>
       )}
 
-      {/* Required columns info */}
-      <div className="flex gap-3 p-4 rounded-lg" style={{ background: 'var(--color-panel-light)', border: '1px solid var(--color-panel-border)' }}>
-        <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: 'var(--color-blue)' }} />
-        <div>
-          <p className="text-sm font-medium text-primary">Required columns</p>
-          <p className="text-xs mono mt-1 text-muted">transaction_id, sender_id, receiver_id, amount, timestamp</p>
+      {/* Required columns info & download sample */}
+      <div className="flex gap-3 p-4 rounded-lg items-start justify-between" style={{ background: 'var(--color-panel-light)', border: '1px solid var(--color-panel-border)' }}>
+        <div className="flex gap-3">
+          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: 'var(--color-blue)' }} />
+          <div>
+            <p className="text-sm font-medium text-primary">Required columns</p>
+            <p className="text-xs mono mt-1 text-muted">transaction_id, sender_id, receiver_id, amount, timestamp</p>
+          </div>
         </div>
       </div>
     </div>
