@@ -35,7 +35,7 @@ Built for the **RIFT 2026 Hackathon** (Financial Crime Detection / Graph Theory 
 | **Graph Algorithms** | NetworkX | Directed graph, Johnson's cycles, centrality |
 | **Statistics** | SciPy, pandas | Benford's Law chi-square, temporal analysis |
 | **GNN (Bonus)** | PyTorch, PyTorch Geometric | GraphSAGE unsupervised anomaly detection |
-| **AI Narratives** | Groq API (llama-3.1-8b-instant) | SAR-ready investigator narratives |
+| **AI Narratives** | Groq API (openai/gpt-oss-20b) | SAR-ready investigator narratives |
 | **Deployment** | Vercel (frontend), Railway (API + Python) | Production hosting |
 
 ---

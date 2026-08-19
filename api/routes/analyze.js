@@ -88,7 +88,9 @@ router.delete('/analysis/:id', async (req, res) => {
 router.post('/narrative', async (req, res) => {
     const { account_id, suspicion_score, detected_patterns, ring_id, lifecycle_stage } = req.body
 
-    if (!process.env.GROQ_API_KEY) {
+    const apiKey = process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.trim() : null
+
+    if (!apiKey) {
         const patterns = (detected_patterns || []).join(', ') || 'none'
         return res.json({
             narrative: `Account ${account_id} has a suspicion score of ${suspicion_score}/100. `
@@ -100,7 +102,7 @@ router.post('/narrative', async (req, res) => {
 
     try {
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-            model: 'llama-3.1-8b-instant',
+            model: 'openai/gpt-oss-20b',
             messages: [{
                 role: 'user',
                 content: `You are a senior financial crime investigator filing a Suspicious Activity Report. Write exactly 3 sentences describing this account professionally:\n`
@@ -109,18 +111,26 @@ router.post('/narrative', async (req, res) => {
                     + `Stage: ${lifecycle_stage}\n`
                     + `End with one sentence recommended action starting with "Recommended Action:"`
             }],
-            max_tokens: 300,
+            max_tokens: 1024,
             temperature: 0.7,
         }, {
             headers: {
-                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json',
             }
         })
-        res.json({ narrative: response.data.choices[0].message.content })
+        const choice = response.data.choices[0]
+        const narrativeContent = (choice.message?.content && choice.message.content.trim()) 
+            ? choice.message.content 
+            : choice.message?.reasoning || 'No narrative content returned.'
+        res.json({ narrative: narrativeContent })
     } catch (err) {
-        console.error('Narrative error:', err.message)
-        res.status(500).json({ error: 'AI narrative generation failed.', message: err.message })
+        const groqErrorMsg = err.response?.data?.error?.message || err.message
+        console.error('Narrative API error details:', err.response?.data || err.message)
+        res.status(err.response?.status || 500).json({ 
+            error: 'AI narrative generation failed.', 
+            message: groqErrorMsg 
+        })
     }
 })
 
